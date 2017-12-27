@@ -1,0 +1,602 @@
+Prosper Loan Exploration by Hang Zhu
+========================================================
+This data set contains 113,937 loans with 81 variables on each loan, including loan amount, borrower rate (or interest rate), current loan status, borrower income, borrower employment status, borrower credit history, and the latest payment information.
+There are NA values in the data, so I conducted data cleaning by removing variables with over 25% NA values and rows with NA values. I got 97886 observations with 67 variables.
+I extracted 10 variables which would be in my exploration.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+# Load all of the packages that you end up using in your analysis in this code
+# chunk.
+
+# Notice that the parameter "echo" was set to FALSE for this code chunk. This
+# prevents the code from displaying in the knitted HTML output. You should set
+# echo=FALSE for all code chunks in your file, unless it makes sense for your
+# report to show the code that generated a particular plot.
+
+# The other parameters for "message" and "warning" should also be set to FALSE
+# for other code chunks once you have verified that each plot comes out as you
+# want it to. This will clean up the flow of your report.
+
+library(ggplot2)
+library(ggcorrplot)
+library(gridExtra)
+library(GGally) 
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Load_the_Data}
+# Load the Data
+loan = read.csv('prosperLoanData.csv')
+
+# return dimension of data
+n = dim(loan)[1]
+p = dim(loan)[2]
+
+# remove features with NA proportion over 0.25
+selected = rep(0, 81)
+for(i in 1:p){
+  selected[i] = ifelse((mean(is.na(loan[,i]))) > 0.25, 0, 1)
+}
+
+# remove rows with NA value and return cleaned data
+cleaned_data = loan[ ,selected == 1]
+cleaned_data = na.omit(cleaned_data)
+
+# extract features that I`m interested in
+used_features = c('CreditScoreRangeLower', 'ProsperRating..Alpha.', 'EmploymentStatus', 'IncomeRange', 'StatedMonthlyIncome', 'DebtToIncomeRatio', 'BorrowerRate', 'BorrowerAPR', 'MonthlyLoanPayment', 'BankcardUtilization')
+dropped_data = cleaned_data[, (names(cleaned_data) %in% used_features)]
+
+dropped_data$EmploymentStatus = factor(dropped_data$EmploymentStatus, 
+                                       levels = c( "Employed", "Full-time" , "Self-employed", "Part-time", "Retired", "Other", "Not employed", "Not available", ""))
+
+# reorder the levels of features
+dropped_data$ProsperRating..Alpha. = factor(dropped_data$ProsperRating..Alpha., levels = c("AA", "A", "B" , "C", "D",  "E", "HR", ""))
+dropped_data$IncomeRange = factor(dropped_data$IncomeRange, levels = c( "$100,000+", "$75,000-99,999", "$50,000-74,999",
+                                                                       "$25,000-49,999","$1-24,999", "$0", "Not employed", "Not displayed"))
+
+```
+
+# Univariate Plots Section
+#### Summary of data
+```{r echo=FALSE, message=FALSE, warning=FALSE, Univariate_Plots}
+# summary of data
+dim(dropped_data)
+names(dropped_data)
+summary(dropped_data)
+```
+
+#### Credit levels of borrowers
+```{r echo=FALSE, message=FALSE, warning=FALSE, credit}
+# CreditScoreRangeLower
+ggplot(aes(x = CreditScoreRangeLower), data = subset(dropped_data)) +
+  geom_histogram(binwidth = 20) +
+  ggtitle('CreditScoreRangeLower Distribution') +
+  theme(plot.title = element_text(hjust=0.5))
+summary(dropped_data$CreditScoreRangeLower)
+
+# ProsperRating..Alpha. histogram
+ggplot(aes(x = ProsperRating..Alpha.), data = subset(dropped_data, ProsperRating..Alpha. != '')) +
+  geom_histogram(stat = 'count') +
+  ggtitle('ProsperRating..Alpha. Distribution') +
+  theme(plot.title = element_text(hjust=0.5))
+```
+
+CreditScore and ProsperRatingm both describe credit level of borrowers. Plotting the histograms of the two features to get to know more about credit level of borrowers. from credit score histogram, most people got credit score lower bound around 640 to 740. On the other hand about prosper rating, only small proportion of people get AA while most of people get A, B, C and D
+
+#### Employment and Income information
+```{r echo=FALSE, message=FALSE, warning=FALSE, Income_info}
+# EmploymentStatus
+ggplot(aes(x = EmploymentStatus), data = subset(dropped_data)) +
+  geom_histogram(stat = 'count') +
+  ggtitle('EmploymentStatus Distribution') +
+  theme(plot.title = element_text(hjust=0.5))
+
+# IncomeRange
+ggplot(aes(x = IncomeRange), data = subset(dropped_data, IncomeRange != "Not displayed")) +
+  geom_histogram(stat = 'count') +
+  ggtitle('Income Range Distribution') +
+  theme(plot.title = element_text(hjust=0.5))
+
+# StatedMonthlyIncome
+ggplot(aes(x = StatedMonthlyIncome), data = dropped_data) +
+  geom_histogram(binwidth = 500) +
+  xlim(0, quantile(dropped_data$StatedMonthlyIncome, 0.99)) +
+  ggtitle('Stated Monthly Income') +
+  theme(plot.title = element_text(hjust=0.5))
+summary(dropped_data$StatedMonthlyIncome)
+
+# DebtToIncomeRatio
+ggplot(aes(x = DebtToIncomeRatio), data = dropped_data) +
+  geom_histogram(binwidth = 0.01) +
+  xlim(0, quantile(dropped_data$DebtToIncomeRatio, 0.99)) +
+  ggtitle('DebtToIncomeRatio') +
+  theme(plot.title = element_text(hjust=0.5))
+summary(dropped_data$DebtToIncomeRatio)
+```
+
+Most borrowers are employed and have full time job. For DebtToIncome Ratio,  it is pretty right skewed and most people have ratio around 0.2. Besides, for income range distribution, most of people have income between 25000 and 75000. Next, for stated monthly income, the distribution is a little right skewed and most of people state 2500 to 7500 dollars per month, which is corresponding to the most income range.
+
+#### Payment information
+```{r echo=FALSE, message=FALSE, warning=FALSE, overall_payment}
+# MonthlyLoanPayment
+ggplot(aes(x = MonthlyLoanPayment), data = dropped_data) +
+  geom_histogram() +
+  xlim(0, quantile(dropped_data$MonthlyLoanPayment, 0.99)) +
+  ggtitle('Monthly Loan Payment') +
+  theme(plot.title = element_text(hjust=0.5))
+```
+
+It seems that there are three levels of monthly payment. the first level  is around 200, second is round 300 and third one is round 500
+
+#### BankcardUtilization
+```{r echo=FALSE, message=FALSE, warning=FALSE,utilization}
+# BankcardUtilization
+ggplot(aes(x = BankcardUtilization), data = dropped_data) +
+  geom_histogram(binwidth = 0.05) +
+  xlim(0,2) +
+  ggtitle('BankcardUtilization') +
+  theme(plot.title = element_text(hjust=0.5))
+```
+
+most people would have utilization from 0.5 to 1. there are also some who have utilization higher than 1 
+
+#### Overall BorrowerRate and BorrowerAPR
+```{r echo=FALSE, message=FALSE, warning=FALSE, Borrower_info}
+# BorrowerRate
+p1 = ggplot(aes(x = BorrowerRate), data = dropped_data) +
+  geom_histogram(binwidth = 0.02) +
+  xlim(0, 0.4) +
+  ggtitle('Borrower Rate') +
+  theme(plot.title = element_text(hjust=0.5))
+
+# BorrowerAPR
+p2 = ggplot(aes(x = BorrowerAPR), data = dropped_data) +
+  geom_histogram(binwidth = 0.02) +
+  xlim(0, 0.4) +
+  ggtitle('Borrower APR') +
+  theme(plot.title = element_text(hjust=0.5))
+
+grid.arrange(p1, p2)
+```
+
+BorrowerRate and BorrowerAPR have very similar distribution. Both of them are a little right skewed but the values of rate more focus on 0.15 while 0.2 for APR
+
+#### the BorrowerRate and BorrowerAPR For Income over $100,000
+```{r echo=FALSE, message=FALSE, warning=FALSE, upper}
+# the BorrowerRate For Income over $100,000
+p1 = ggplot(aes(x = BorrowerRate), data = dropped_data[dropped_data$IncomeRange == '$100,000+', ] ) +
+  geom_histogram(binwidth = 0.015) +
+  xlim(0, 0.4) +
+  ylim(0, 2000) +
+  scale_fill_brewer(type = "qual", palette = "Accent") +
+  ggtitle('the BorrowerRate For Income over $100,000') +
+  theme(plot.title = element_text(hjust=0.5))
+
+# the BorrowerAPR For Income over $100,000
+p2 = ggplot(aes(x = BorrowerAPR), data = dropped_data[dropped_data$IncomeRange == '$100,000+', ] ) +
+  geom_histogram(binwidth = 0.015) +
+  xlim(0, 0.4) +
+  ylim(0, 2000) +
+  scale_fill_brewer(type = "qual", palette = "Accent") +
+  ggtitle('the BorrowerAPR For Income over $100,000') +
+  theme(plot.title = element_text(hjust=0.5))
+
+grid.arrange(p1, p2)
+```
+
+for people with Income over $100,000, they have both Borrower rate between 0.05 and 0.22 mostly, but there are still a small group of people having rate and APR over 0.35
+
+#### the BorrowerRate and BorrowerAPR For Income between $50,000-74,999
+```{r echo=FALSE, message=FALSE, warning=FALSE, middle}
+# the BorrowerRate For Income between $50,000-74,999
+p1 = ggplot(aes(x = BorrowerRate), data = dropped_data[dropped_data$IncomeRange == "$50,000-74,999", ] ) +
+  geom_histogram(binwidth = 0.02) +
+  xlim(0, 0.4) +
+  scale_fill_brewer(type = "qual", palette = "Accent") +
+  ggtitle('the BorrowerRate For Income between $50,000-74,999') +
+  theme(plot.title = element_text(hjust=0.5))
+
+# the BorrowerAPR For Income between $50,000-74,999
+p2 = ggplot(aes(x = BorrowerAPR), data = dropped_data[dropped_data$IncomeRange == "$50,000-74,999", ] ) +
+  geom_histogram(binwidth = 0.02) +
+  xlim(0, 0.4) +
+  scale_fill_brewer(type = "qual", palette = "Accent") +
+  ggtitle('the BorrowerAPR For Income between $50,000-74,999') +
+  theme(plot.title = element_text(hjust=0.5))
+
+grid.arrange(p1, p2)
+
+```
+
+for people with Income between $50,000-74,999, the distributions of rate and APR are slightly different and they tend to have rate between 0.1 and 0.25 while APR between 0.15 and 0.3
+
+#### the BorrowerRate and BorrowerAPR For Income between $1-24,999
+```{r echo=FALSE, message=FALSE, warning=FALSE, lower}
+# the BorrowerRate For Income between $1-24,999
+p1 = ggplot(aes(x = BorrowerRate), data = dropped_data[dropped_data$IncomeRange == "$1-24,999", ] ) +
+  geom_histogram(binwidth = 0.02) +
+  ylim(0, 600) +
+  xlim(0, 0.4) +
+  scale_fill_brewer(type = "qual", palette = "Accent") +
+  ggtitle('the BorrowerRate For Income between $1-24,999') +
+  theme(plot.title = element_text(hjust=0.5))
+
+# the BorrowerAPR For Income between $1-24,999
+p2 = ggplot(aes(x = BorrowerAPR), data = dropped_data[dropped_data$IncomeRange == "$1-24,999", ] ) +
+  geom_histogram(binwidth = 0.02) +
+  ylim(0, 600) +
+  xlim(0, 0.4) +
+  scale_fill_brewer(type = "qual", palette = "Accent") +
+  ggtitle('the BorrowerAPR For Income between $1-24,999') +
+  theme(plot.title = element_text(hjust=0.5))
+grid.arrange(p1, p2)
+```
+
+For people with Income between $1-24,999, the distributions are very close and most people have relatively higher values between 0.15 and 0.3.
+
+# Univariate Analysis
+### What is the structure of your dataset?
+
+The original data contains 113937 loan observations with 81 features. After data cleaning, I got 97886 observations with 46 features. Finally, I selected 10 of them to do analysis, including 'CreditScoreRangeLower', 'ProsperRating..Alpha.', 'EmploymentStatus', 'IncomeRange', 'StatedMonthlyIncome', 'DebtToIncomeRatio', 'BorrowerRate', 'BorrowerAPR', 'MonthlyLoanPayment', 'BankcardUtilization'
+
+### What is/are the main feature(s) of interest in your dataset?
+
+CreditScoreRangeLower, IncomeRange, DebtToIncomeRatio, BorrowerRate, BorrowerAPR
+
+### What other features in the dataset do you think will help support your \
+investigation into your feature(s) of interest?
+
+EmploymentStatus, ProsperRating..Alpha., StatedMonthlyIncome, MonthlyLoanPayment, BankcardUtilization
+
+### Did you create any new variables from existing variables in the dataset?
+
+### Of the features you investigated, were there any unusual distributions? \
+Did you perform any operations on the data to tidy, adjust, or change the form \
+of the data? If so, why did you do this?
+
+Yes. MonthlyLoanPayment gives a unusual distribution. It looks like there are three levels rather than a continuous right skewed distribution.
+
+Yes. I cleaned the data to tidy because there are a lot of NA values in the data and also some non informative features.
+
+# Bivariate Plots Section
+
+#### pair plot and correlation heatmap
+```{r echo=FALSE, echo=FALSE, message=FALSE, warning=FALSE, pair_plot}
+# pair plots
+set.seed(123123)
+loan_samp = dropped_data[sample(1:n, 5000), ]
+ggpairs(loan_samp)
+
+# correlation heatmap
+corr = cor(dropped_data[, names(dropped_data) %in% c("BorrowerAPR", "BorrowerRate",
+                                                   "CreditScoreRangeLower", "BankcardUtilization",
+                                                   "DebtToIncomeRatio", "StatedMonthlyIncome", "MonthlyLoanPayment")])
+ggcorrplot(corr, hc.order = TRUE, colors = c( "blue", "white","red"),
+           outline.col = "white")
+```
+
+from correlation heatmap, CreditScoreRangeLower and "BorrowerAPR", "BorrowerRate" and "BankcardUtilization" have pretty strong negative correlation. "MonthlyLoanPayment" and "StatedMonthlyIncome" and "CreditScoreRangeLower" have positive correlation. "BorrowerAPR", "BorrowerRate" and  "BankcardUtilization" have positive correlation
+
+#### CreditScoreRangeLower vs BorrowerAPR
+```{r echo=FALSE, echo=FALSE, message=FALSE, warning=FALSE, CreditScoreRangeLower_BorrowerAPR}
+# CreditScoreRangeLower and BorrowerAPR
+ggplot(aes(x = CreditScoreRangeLower, y = BorrowerAPR), data = dropped_data) +
+  geom_point(alpha = 0.01, color = 'black', size = 5) +
+  # geom_smooth(method = 'lm', color = 'red') +
+  geom_line(stat = 'summary', fun.y = mean, color = 'red', size = 1.5) +
+  geom_line(stat = 'summary', fun.y = quantile, 
+            fun.args = list(probs = .1),
+            linetype = 2, color = 'blue', size = 1.5) +
+  geom_line(stat = 'summary', fun.y = quantile, 
+            fun.args = list(probs = .9),
+            linetype = 2, color = 'blue', size = 1.5) +
+  geom_line(stat = 'summary', fun.y = quantile, 
+            fun.args = list(probs = .5),
+            color = 'white', size = 1.5) +
+  ggtitle('BorrowerAPR vs CreditScoreRangeLower') +
+  theme(plot.title = element_text(hjust=0.5))
+
+relation = lm(BorrowerAPR~CreditScoreRangeLower, data = dropped_data)
+summary(relation)
+```
+
+from the scatter plot with lines of third quartile(upper blue dashed), mean(red), median(white) and first quartile(lower blue dashed) and the p value from linear regression model, there is a negative correlation between CreditScoreRangeLower and BorrowerAPR.
+
+#### CreditScoreRangeLower vs BankcardUtilization
+```{r echo=FALSE, echo=FALSE, message=FALSE, warning=FALSE, CreditScoreRangeLower_BankcardUtilization}
+# CreditScoreRangeLower and BankcardUtilization
+ggplot(aes(x = CreditScoreRangeLower, y = BankcardUtilization), data = dropped_data) +
+  geom_point(alpha = 0.01, size = 10) +
+  ylim(0.001, quantile(dropped_data$BankcardUtilization, 0.99)) +
+  geom_smooth(method = 'lm', color = 'red') +
+  ggtitle('BankcardUtilization vs CreditScoreRangeLower') +
+  theme(plot.title = element_text(hjust=0.5))
+
+score_uti = lm(BankcardUtilization~CreditScoreRangeLower, data = dropped_data)
+summary(score_uti)
+```
+
+from the scatter plot and linear regression analysis, the two features are correlated. People having credit score lower then 620 tend to have much higher card utilization, whereas for people having score over 790, they have much lower utilization. For people between 620 and 790, the distribution is pretty spreaded
+
+#### CreditScore for each rating and income
+```{r echo=FALSE, echo=FALSE, message=FALSE, warning=FALSE, CreditScoreRangeLower_rating_income}
+ggplot(aes(x = CreditScoreRangeLower, fill = ProsperRating..Alpha.), data = subset(dropped_data, ProsperRating..Alpha. != '')) +
+  geom_histogram(binwidth = 20) +
+  scale_fill_brewer(type = "qual", palette = "Accent") +
+  ggtitle('The credit score for each prosper rating') +
+  theme(plot.title = element_text(hjust=0.5))
+
+ggplot(aes(x = CreditScoreRangeLower, fill = IncomeRange), data = dropped_data) +
+  geom_histogram(binwidth = 20) +
+  scale_fill_brewer(type = "qual", palette = "Accent") +
+  ggtitle('For Income Range the credit score') +
+  theme(plot.title = element_text(hjust=0.5))
+```
+
+With higher score, more prople have higher prosper rating AA. from score 700 to 780, there are more people with rating A. from score 640 to 720, more people have B.
+Generally speaking, more people in score range from 640 to 750 have income over 25000
+
+#### BankcardUtilization vs IncomeRange
+```{r echo=FALSE, echo=FALSE, message=FALSE, warning=FALSE, BankcardUtilization_IncomeRange}
+# BankcardUtilization and IncomeRange
+ggplot(aes(x = IncomeRange, y = BankcardUtilization), data = dropped_data) +
+  geom_boxplot() +
+  ylim(0, quantile(dropped_data$BankcardUtilization, 0.99)) +
+  ggtitle('BankcardUtilization vs IncomeRange') +
+  theme(plot.title = element_text(hjust=0.5))
+sort(by(dropped_data$BankcardUtilization, dropped_data$IncomeRange, mean))
+```
+
+From boxplots, we can see the distributions are pretty symmetric and by comparing the mean BankcardUtilization for all income range, it seems that with income increasing, the BankcardUtilization is also increasing
+
+#### DebtToIncomeRatio vs ProsperRating..Alpha.
+```{r echo=FALSE, echo=FALSE, message=FALSE, warning=FALSE, DebtToIncomeRatio_ProsperRating..Alpha.}
+# DebtToIncomeRatio and ProsperRating..Alpha.
+ggplot(aes(x = ProsperRating..Alpha., y = DebtToIncomeRatio), data = subset(dropped_data, ProsperRating..Alpha. != '')) +
+  geom_boxplot() +
+  ylim(0, quantile(dropped_data$DebtToIncomeRatio, 0.95)) +
+  ggtitle('DebtToIncomeRatio and ProsperRating..Alpha.') +
+  theme(plot.title = element_text(hjust=0.5))
+by(dropped_data$DebtToIncomeRatio, dropped_data$ProsperRating..Alpha., summary)
+```
+
+Comparing mean DebtToIncomeRatio for each ProsperRating, it looks like that AA has lowest ratio and with the rating goes down, the ratio increases.
+
+#### MonthlyLoanPayment vs EmploymentStatus
+```{r echo=FALSE, echo=FALSE, message=FALSE, warning=FALSE, MonthlyLoanPayment_EmploymentStatus}
+# MonthlyLoanPayment and EmploymentStatus
+ggplot(aes(x = EmploymentStatus, y = MonthlyLoanPayment), data = dropped_data) +
+  geom_boxplot() +
+  ylim(0, quantile(dropped_data$MonthlyLoanPayment, 0.99)) +
+  ggtitle('BankcardUtilization vs CreditScoreRangeLower') +
+  theme(plot.title = element_text(hjust=0.5))
+by(dropped_data$MonthlyLoanPayment, dropped_data$EmploymentStatus, summary)
+```
+
+from boxplots, people who are employed, self-employed have overall higher monthly payment, whereas not-employed and retired people have lower value.
+
+# Bivariate Analysis
+### Talk about some of the relationships you observed in this part of the \
+investigation. How did the feature(s) of interest vary with other features in \
+the dataset?
+
+ CreditScoreRangeLower and "BorrowerAPR", "BorrowerRate" and "BankcardUtilization" have pretty strong negative correlation. "MonthlyLoanPayment" and "StatedMonthlyIncome" and "CreditScoreRangeLower" have positive correlation. "BorrowerAPR", "BorrowerRate" and  "BankcardUtilization" have positive correlation.
+
+For DebtToIncomeRatio and ProsperRating, rating AA has lowest ratio and with the rating goes down, the ratio increases, which indicates a negative correlation between them.
+
+from boxplots of MonthlyLoanPayment vs EmploymentStatus, people who are employed, self-employed have overall higher monthly payment, whereas not-employed and retired people have lower value.
+
+### Did you observe any interesting relationships between the other features \
+(not the main feature(s) of interest)?
+
+For the relationship between BankcardUtilization and IncomeRange, by boxplots and comparing the mean BankcardUtilization for all income range, it seems that with income increasing, the BankcardUtilization is also increasing
+
+### What was the strongest relationship you found?
+"BorrowerAPR" and "BorrowerRate". The two features almost determine each other
+
+# Multivariate Plots Section
+#### the MonthlyLoanPayment for different income range and employmentstatus
+```{r echo=FALSE, echo=FALSE, message=FALSE, warning=FALSE, IncomeRange_Employmentstatus_MonthlyLoanPayment}
+# the MonthlyLoanPayment for different income range and employmentstatus
+ggplot(aes(x = MonthlyLoanPayment, fill = EmploymentStatus), data = subset(dropped_data,IncomeRange != "Not displayed")) +
+  geom_histogram() +
+  xlim(0, quantile(dropped_data$MonthlyLoanPayment, 0.99)) +
+  facet_wrap(~IncomeRange) +
+  scale_fill_brewer(type = "qual", palette = "Accent") +
+  ggtitle('MonthlyLoanPayment For different Income Range and employmentstatus') +
+  theme(plot.title = element_text(hjust=0.5))
+```
+
+Generally, for people with income less than 50000, more people have monthly payment less than 300, but with income over 50000, more people have higher payment and the distribution is more spreaded.
+
+#### BankcardUtilization vs StatedMonthlyIncome for each ProsperRating
+```{r echo=FALSE, echo=FALSE, message=FALSE, warning=FALSE, BankcardUtilization_StatedMonthlyIncome_ProsperRating}
+# BankcardUtilization vs StatedMonthlyIncome for each ProsperRating
+ggplot(aes(x = StatedMonthlyIncome, y = BankcardUtilization),
+       data = subset(dropped_data, ProsperRating..Alpha. != '')) +
+  xlim(0, quantile(dropped_data$StatedMonthlyIncome, 0.99)) +
+  geom_smooth(method = "lm", aes(color = ProsperRating..Alpha.)) +
+  scale_color_brewer(type = "seq", palette = 'Greens', direction = -1) +
+  ggtitle('BankcardUtilization vs StatedMonthlyIncome for each ProsperRating') +
+  theme(plot.title = element_text(hjust=0.5))
+```
+
+Overall, card utilization is increasing with higher stated monthly income. However, for people with higher Prosper rating like AA, A, they have much less utilization than others, whereas people with C, D, E have close utilization
+
+#### Average DebtToIncomeRatio vs CreditScoreRangeLower for each ProsperRating
+```{r echo=FALSE, echo=FALSE, message=FALSE, warning=FALSE, DebtToIncomeRatio_CreditScoreRangeLower_ProsperRating, fig.width = 8, fig.height = 10}
+# Average DebtToIncomeRatio vs CreditScoreRangeLower for each ProsperRating
+p1 = ggplot(aes(x = CreditScoreRangeLower, y = DebtToIncomeRatio),
+       data = subset(dropped_data, ProsperRating..Alpha. != '')) +
+  ylim(0, quantile(dropped_data$DebtToIncomeRatio, 0.99)) +
+  coord_cartesian(ylim = c(0, 0.6)) +
+  geom_smooth(stat = 'summary', fun.y = mean, aes(color = ProsperRating..Alpha.)) +
+  geom_line(stat = 'summary', fun.y = mean, linetype = 2) +
+  scale_color_brewer(type = "seq", palette = 'Blues', direction = -1) +
+  ggtitle('Average DebtToIncomeRatio vs CreditScoreRangeLower for each ProsperRating') +
+  theme(plot.title = element_text(hjust=0.5))
+
+p2 = ggplot(aes(x = 30 * round(CreditScoreRangeLower/30), y = DebtToIncomeRatio),
+            data = subset(dropped_data, ProsperRating..Alpha. != '')) +
+  ylim(0, quantile(dropped_data$DebtToIncomeRatio, 0.99)) +
+  coord_cartesian(ylim = c(0, 0.6)) +
+  geom_smooth(stat = 'summary', fun.y = mean, aes(color = ProsperRating..Alpha.)) +
+  geom_line(stat = 'summary', fun.y = mean, linetype = 2) +
+  scale_color_brewer(type = "seq", palette = 'Blues', direction = -1) 
+
+p3 = ggplot(aes(x = 60 * round(CreditScoreRangeLower/60), y = DebtToIncomeRatio),
+       data = subset(dropped_data, ProsperRating..Alpha. != '')) +
+  ylim(0, quantile(dropped_data$DebtToIncomeRatio, 0.99)) +
+  coord_cartesian(ylim = c(0, 0.6)) +
+  geom_smooth(stat = 'summary', fun.y = mean, aes(color = ProsperRating..Alpha.)) +
+  geom_line(stat = 'summary', fun.y = mean, linetype = 2) +
+  scale_color_brewer(type = "seq", palette = 'Blues', direction = -1) 
+
+grid.arrange(p1, p2, p3, ncol = 1)
+```
+
+There is a decreasing trend for grand mean value of DebtToIncomeRatio with increasing of creditscore. After doing bias variance tradeoff, it is very clear that higher rating AA or A gives lower DebtToIncomeRatio than grand mean value, while low ratings like C D E give pretty close and high  DebtToIncomeRatio vaues.
+
+#### Median MonthlyLoanPayment vs CreditScoreRangeLower for each IncomeRange
+```{r echo=FALSE, echo=FALSE, message=FALSE, warning=FALSE, MonthlyLoanPayment_CreditScoreRangeLower_EmploymentStatus, fig.width = 8, fig.height = 10}
+# Median MonthlyLoanPayment vs CreditScoreRangeLower for each IncomeRange
+p1 = ggplot(aes(x = CreditScoreRangeLower, y = MonthlyLoanPayment),
+       data = subset(dropped_data, IncomeRange != 'Not displayed')) +
+  ylim(0, quantile(dropped_data$MonthlyLoanPayment, 0.99)) +
+  coord_cartesian(ylim = c(0, 500)) +
+  geom_smooth(stat = 'summary', fun.y = median, aes(color = IncomeRange)) +
+  geom_line(stat = 'summary', fun.y = median, linetype = 2) +
+  scale_color_brewer(type = "seq", palette = 'Oranges', direction = -1) +
+  ggtitle('Median MonthlyLoanPayment vs CreditScoreRangeLower for each IncomeRange') +
+  theme(plot.title = element_text(hjust=0.5))
+ 
+p2 = ggplot(aes(x = 10 * round(CreditScoreRangeLower/10), y = MonthlyLoanPayment),
+            data = subset(dropped_data, IncomeRange != 'Not displayed')) +
+  ylim(0, quantile(dropped_data$MonthlyLoanPayment, 0.99)) +
+  coord_cartesian(ylim = c(0, 500)) +
+  geom_smooth(stat = 'summary', fun.y = median, aes(color = IncomeRange)) +
+  geom_line(stat = 'summary', fun.y = median, linetype = 2) +
+  scale_color_brewer(type = "seq", palette = 'Oranges', direction = -1)
+
+p3 = ggplot(aes(x = 30 * round(CreditScoreRangeLower/30), y = MonthlyLoanPayment),
+            data = subset(dropped_data, IncomeRange != 'Not displayed')) +
+  ylim(0, quantile(dropped_data$MonthlyLoanPayment, 0.99)) +
+  coord_cartesian(ylim = c(0, 500)) +
+  geom_smooth(stat = 'summary', fun.y = median, aes(color = IncomeRange)) +
+  geom_line(stat = 'summary', fun.y = median, linetype = 2) +
+  scale_color_brewer(type = "seq", palette = 'Oranges', direction = -1)
+grid.arrange(p1, p2, p3, ncol = 1)
+```
+
+Generally people with income higher than 50,000 under credit score 800 would have monthly payment over than grand median value, while people with credit lower than 650 have very close payment no matter what income range. Compared with higher income people, those with income less than 50,000 would have pretty low and close payment even if they have high credit score.
+
+#### CreditScoreRangeLower and BorrowerAPR for each ProsperRating
+```{r echo=FALSE, echo=FALSE, message=FALSE, warning=FALSE, BorrowerAPR_CreditScoreRangeLower_ProsperRating}
+# CreditScoreRangeLower and BorrowerAPR for each ProsperRating
+ggplot(aes(x = CreditScoreRangeLower, y = BorrowerAPR), data = subset(dropped_data, ProsperRating..Alpha. != '')) +
+  geom_point(aes(color = ProsperRating..Alpha.), size = 5) +
+  scale_color_brewer(type = "seq", palette = 'Greens', direction = -1)+
+  ggtitle('BorrowerAPR vs CreditScoreRangeLower for each ProsperRating') +
+  theme(plot.title = element_text(hjust=0.5))
+```
+
+Overall, people with higher prosper rating and higher credit score would have much lower APR than others. and when people get credit score higher than 820, most of them would have higher rating and lower APR.
+
+#### MonthlyLoanPayment and DebtToIncomeRatio for each IncomeRange
+```{r echo=FALSE, echo=FALSE, message=FALSE, warning=FALSE, MonthlyLoanPayment_DebtToIncomeRatio_IncomeRange_EmploymentStatus, fig.width = 9, fig.height = 10}
+# MonthlyLoanPayment and BorrowerAPR for each IncomeRange
+ggplot(aes(x = MonthlyLoanPayment, y = DebtToIncomeRatio, color = IncomeRange), data = subset(dropped_data, IncomeRange != 'Not displayed')) +
+  geom_point() +
+  xlim(0, quantile(dropped_data$MonthlyLoanPayment, 0.99)) +
+  ylim(0.001, quantile(dropped_data$DebtToIncomeRatio, 0.99)) +
+  facet_wrap(~ EmploymentStatus) +
+  scale_color_brewer(type = "seq", palette = 'Blues', direction = -1)+
+  ggtitle('MonthlyLoanPayment vs DebtToIncomeRatio for each IncomeRange and EmploymentStatus') +
+  theme(plot.title = element_text(hjust=0.5))
+```
+
+Basically, people who are employed, full-time or self-employed having higher income would have higher Monthly payment and lower DebtToIncomeRatio, while for people who are part-time and retired, they tend to have much less income and less monthly payment
+
+# Multivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the \
+investigation. Were there features that strengthened each other in terms of \
+looking at your feature(s) of interest?
+
+For people with income less than 50000, more people have monthly payment less than 300, but with income over 50000, more people have higher payment and higher credit score and the number of people for different payments are very close.
+Bankcard utilization is increasing with higher stated monthly income.  higher rosper rating gives lower utilization.
+There is a decreasing trend for grand mean value of DebtToIncomeRatio with increasing of credit score.
+People who are employed, full-time or self-employed having higher income would have higher Monthly payment and lower DebtToIncomeRatio.
+People with higher prosper rating and higher credit score would have much lower APR than others. 
+
+### Were there any interesting or surprising interactions between features?
+
+For relationship among credit score, income range and monthly payment, generally people with income higher than 50,000 under credit score 800 would have monthly payment over than grand median value, while people with credit lower than 650 have very close payment values in no matter what income range. Compared with higher income people, those with income less than 50,000 would have pretty low and close payment even if they have high credit score. 
+
+### OPTIONAL: Did you create any models with your dataset? Discuss the \
+strengths and limitations of your model.
+
+------
+
+# Final Plots and Summary
+### Plot One
+```{r echo=FALSE, echo=FALSE, message=FALSE, warning=FALSE, plot1}
+# DebtToIncomeRatio and ProsperRating..Alpha.
+ggplot(aes(x = ProsperRating..Alpha., y = DebtToIncomeRatio), data = subset(dropped_data, ProsperRating..Alpha. != '')) +
+  geom_boxplot() +
+  ylim(0, quantile(dropped_data$DebtToIncomeRatio, 0.95)) +
+  ggtitle('DebtToIncomeRatio and ProsperRating..Alpha.') +
+  theme(plot.title = element_text(hjust=0.5))
+```
+
+### Description One
+This plot compares mean DebtToIncomeRatio for each ProsperRating. It looks like that AA has lowest ratio and with the rating goes down, the DebtToIncomeRatio increases.
+
+### Plot Two
+```{r echo=FALSE, echo=FALSE, message=FALSE, warning=FALSE, fig.width = 8, plot2}
+ggplot(aes(x = 30 * round(CreditScoreRangeLower/30), y = MonthlyLoanPayment),
+            data = subset(dropped_data, IncomeRange != 'Not displayed')) +
+  ylim(0, quantile(dropped_data$MonthlyLoanPayment, 0.99)) +
+  coord_cartesian(ylim = c(0, 500)) +
+  geom_smooth(stat = 'summary', fun.y = median, aes(color = IncomeRange)) +
+  geom_line(stat = 'summary', fun.y = median, linetype = 2) +
+  scale_color_brewer(type = "seq", palette = 'Oranges', direction = -1) +
+  ggtitle('Median MonthlyLoanPayment vs CreditScoreRangeLower for each IncomeRange') +
+  theme(plot.title = element_text(hjust=0.5))
+```
+
+### Description Two
+This plot measures the relationship between credit score and monthly payment for each income range. Generally people with income higher than 50,000 under credit score 800 would have monthly payment over than grand median value, while people with credit lower than 650 have very close payment no matter what income range. Compared with higher income people, those with income less than 50,000 would have pretty low and close payment even if they have high credit score.
+
+### Plot Three
+```{r echo=FALSE, echo=FALSE, message=FALSE, warning=FALSE, plot3, fig.width = 9, fig.height = 10}
+# MonthlyLoanPayment and DebtToIncomeRatio for each IncomeRange in different EmploymentStatus
+ggplot(aes(x = MonthlyLoanPayment, y = DebtToIncomeRatio, color = IncomeRange), data = subset(dropped_data, IncomeRange != 'Not displayed')) +
+  geom_point() +
+  xlim(0, quantile(dropped_data$MonthlyLoanPayment, 0.99)) +
+  ylim(0.001, quantile(dropped_data$DebtToIncomeRatio, 0.99)) +
+  facet_wrap(~ EmploymentStatus) +
+  scale_color_brewer(type = "seq", palette = 'Blues', direction = -1)+
+  ggtitle('MonthlyLoanPayment vs DebtToIncomeRatio for each IncomeRange and EmploymentStatus') +
+  theme(plot.title = element_text(hjust=0.5))
+```
+
+### Description Three
+This plot describes the relationship between MonthlyLoanPayment and DebtToIncomeRatio for each IncomeRange in different EmploymentStatus. Basically, people who are employed, full-time or self-employed having higher income would have higher Monthly payment and lower DebtToIncomeRatio, while for people who are part-time and retired, they tend to have much less income and less monthly payment
+
+------
+
+# Reflection
+This prosper loan data includes 97886 observations with 46 effective variables, which is a very large data set. It was very difficult for me to get started since I had no idea about any financial variables or data.
+
+After knowing more about financial loan variables through online resources, I started exploring single variable and try to understand what is the meaning and distribution of the variables.
+Correlation matrix and heatmap really helped a lot. After calculating correlations between numerical features, I got some clues about the relationships among them. For example, CreditScoreRangeLower and “BorrowerAPR”, “BorrowerRate” and “BankcardUtilization” have pretty strong negative correlation. “MonthlyLoanPayment” and “StatedMonthlyIncome” and “CreditScoreRangeLower” have positive correlation. “BorrowerAPR”, “BorrowerRate” and “BankcardUtilization” have positive correlation.
+I also conducted some linear regression model between some variables, which gives a more intuition about their correlation.
+
+There are also some lproblems I met about this analysis. Some variables have very high correlation like BorrowerRate and BorrowerAPR. They almost give identical distribution, so no more exploration shall be done between them. Other variables relative to income like IncomeRange, StatedMonthlyIncome and DebtToIncomeRatio are also very corrlated.
+On the other hand, there is barely correlation between some variables like MonthlyLoanPaymen and BankcardUtilization. 
+For variable EmploymentStatus, since Employed takes a very large percentage among all levels, it`s not easy to visualize the corrlation with others.
+
+Limitations also exist for this analysis. In data cleaning procedure, I deleted rows with NA value, which lost some data points and information. Some variables have strong correlations while some have very little. There is also unbalance problem in some variables, which causes limited exploration  
+
+In the future, more variables could be explored since I only used 10 of 46 effective variables. 
+
